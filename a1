@@ -1,0 +1,128 @@
+const int BUTTON_PIN = 2; // Change this to the pin your button is connected to
+bool isMode1 = true; // Track the current mode
+const int RGB_RED_PIN = 6;
+const int RGB_GREEN_PIN  = 5;
+const int RGB_BLUE_PIN  = 3;
+const int DELAY_MS = 20; // delay in ms between changing colors
+const int MAX_COLOR_VALUE = 255;
+
+const int LED_OUTPUT_PIN = A5;
+const boolean COMMON_ANODE = false; 
+
+// Set the min and max photocell values (this will be based on
+// the brightness of your environment and the size of the voltage-divider
+// resistor that you selected).
+const int MIN_PHOTOCELL_VAL = 200; 
+const int MAX_PHOTOCELL_VAL = 800;
+
+void setup() {
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Set button pin as input with internal pull-up resistor
+  // Initialize other pins and serial communication as needed
+}
+
+void loop() {
+  // Check if the button is pressed to toggle modes
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    isMode1 = !isMode1; // Toggle mode
+    delay(200); // Debounce delay
+  }
+
+  if (isMode1) {
+    enum RGB {
+    RED,
+    GREEN,
+    BLUE,
+    NUM_COLORS
+    };
+
+    int _rgbLedValues[] = {255, 255, 255}; // Set a static color (all 255 for white)
+
+    void setup() {
+    pinMode(RGB_RED_PIN, OUTPUT);
+    pinMode(RGB_GREEN_PIN, OUTPUT);
+    pinMode(RGB_BLUE_PIN, OUTPUT);
+    pinMode(PHOTOCELL_PIN, INPUT);
+
+    Serial.begin(9600);
+    Serial.println("Red, Green, Blue, Light Level");
+
+    setColor(_rgbLedValues[RED], _rgbLedValues[GREEN], _rgbLedValues[BLUE]);
+    delay(DELAY_MS);
+    }
+
+    void loop() {
+    int photocellVal = analogRead(PHOTOCELL_PIN);
+
+    // Map the sensor value to dimmer range with more light
+    int ledVal = map(photocellVal, MIN_PHOTOCELL_VAL, MAX_PHOTOCELL_VAL, 0, 255);
+    ledVal = constrain(ledVal, 0, 255);
+
+    // Apply the brightness value to all three colors (maintain color)
+    for (int i = 0; i < NUM_COLORS; i++) {
+        _rgbLedValues[i] = ledVal;
+    }
+
+    if (COMMON_ANODE == false) {
+        // Invert LED value for common cathode
+        for (int i = 0; i < NUM_COLORS; i++) {
+        _rgbLedValues[i] = 255 - _rgbLedValues[i];
+        }
+    }
+
+    setColor(_rgbLedValues[RED], _rgbLedValues[GREEN], _rgbLedValues[BLUE]);
+    Serial.print(_rgbLedValues[RED]);
+    Serial.print(", ");
+    Serial.print(_rgbLedValues[GREEN]);
+    Serial.print(", ");
+    Serial.print(_rgbLedValues[BLUE]);
+    Serial.print(", ");
+    Serial.println(photocellVal);
+
+    delay(DELAY_MS);
+    }
+
+
+
+
+    void setColor(int red, int green, int blue)
+    {
+    if(COMMON_ANODE == true){
+        red = MAX_COLOR_VALUE - red;
+        green = MAX_COLOR_VALUE - green;
+        blue = MAX_COLOR_VALUE - blue;
+    }
+    analogWrite(RGB_RED_PIN, red);
+    analogWrite(RGB_GREEN_PIN, green);
+    analogWrite(RGB_BLUE_PIN, blue);  
+    }
+
+
+  } else {
+    const int RGB_RED_PIN = 6;
+    const int RGB_GREEN_PIN = 5;
+    const int RGB_BLUE_PIN = 3;
+    const int ANALOG_PIN = A0;
+
+    void setup() {
+    pinMode(RGB_RED_PIN, OUTPUT);
+    pinMode(RGB_GREEN_PIN, OUTPUT);
+    pinMode(RGB_BLUE_PIN, OUTPUT);
+    Serial.begin(9600);
+    }
+
+    void loop() {
+    int sensorValue = analogRead(ANALOG_PIN); // Read analog input from the conductive material
+    int greenValue = map(sensorValue, 0, 1023, 0, 255); // Map the analog value to green color intensity
+    int blueValue = 255 - greenValue; // Invert the green value to get blue value
+
+    analogWrite(RGB_GREEN_PIN, greenValue); // Set green color
+    analogWrite(RGB_BLUE_PIN, blueValue); // Set blue color
+    analogWrite(RGB_RED_PIN, 0); // No red color
+
+    Serial.print("Sensor Value: ");
+    Serial.println(sensorValue);
+    delay(100); // Adjust delay as needed
+    }
+
+  }
+}
