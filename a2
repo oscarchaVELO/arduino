@@ -1,0 +1,239 @@
+#include <Wire.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+#define OLED_RESET 4      // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 _display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Define I/O pins
+const int TONE_OUTPUT_PIN = 8;
+const int VIBROMOTOR_OUTPUT_PIN = 12;
+const int LED_PIN = 9; // Define LED pin
+const int JOY_X_PIN = A0;
+const int JOY_Y_PIN = A1;
+const int START_BUTTON_PIN = 4;
+const unsigned long DEBOUNCE_DELAY = 50; // Adjust as needed
+
+// Set constants
+const int DELAY_LOOP_MS = 5;
+const int BALL_RADIUS = 5;
+const int WALL_COLLISION_TONE_FREQUENCY = 100;
+const int CEILING_COLLISION_TONE_FREQUENCY = 200;
+const int PLAY_TONE_DURATION_MS = 200;
+const int VIBROMOTOR_DURATION_MS = 200;
+const int NUM_DOTS = 5;
+
+// Vibromotor timing
+unsigned long _vibroMotorStartTimeStamp = -1;
+
+// Ball variables
+int _xBall = SCREEN_WIDTH / 2; // Start ball in the middle of the screen
+int _yBall = SCREEN_HEIGHT / 2; // Start ball in the middle of the screen
+int _xSpeed = 1; // Initial speed in X direction
+int _ySpeed = 1; // Initial speed in Y direction
+
+// Dot variables
+int _dotX[NUM_DOTS];
+int _dotY[NUM_DOTS];
+bool _dotVisible[NUM_DOTS] = {true, true, true, true, true};
+int _dotsRemaining = NUM_DOTS;
+
+// Joystick variables
+int _joyXCenter = 512; // Center value of X-axis joystick
+int _joyYCenter = 512; // Center value of Y-axis joystick
+
+// for tracking fps
+float _fps = 0;
+unsigned long _frameCount = 0;
+unsigned long _fpsStartTimeStamp = 0;
+
+// status bar
+const boolean _drawStatusBar = true; // change to show/hide status bar
+bool _gameStarted = false; // Indicates if the game has started
+
+void setup()
+{
+  pinMode(TONE_OUTPUT_PIN, OUTPUT);
+  pinMode(VIBROMOTOR_OUTPUT_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT); // Set LED pin as output
+  pinMode(START_BUTTON_PIN, INPUT_PULLUP); // Set the start button pin as input with pull-up resistor
+
+  digitalWrite(LED_PIN, LOW); // Make sure LED is initially off
+
+  Serial.begin(9600);
+
+  initializeOledAndShowStartupScreen();
+  generateDotPositions();
+}
+
+void loop()
+{
+  while (true) {
+    if (!_gameStarted)
+    {
+      displayStartScreen();
+      checkStartCondition();
+      continue;
+    }
+
+    _display.clearDisplay();
+
+
+    int xVal = analogRead(JOY_X_PIN);
+    int yVal = analogRead(JOY_Y_PIN);
+
+    // Map joystick values to ball position
+    _xBall += map(xVal - _joyXCenter, -512, 511, -2, 2); // Adjust mapping to ensure ball stays within screen bounds
+    _yBall += map(yVal - _joyYCenter, -512, 511, -2, 2); // Adjust mapping to ensure ball stays within screen bounds
+
+    // Update ball position based on speed
+    _xBall += _xSpeed;
+    _yBall += _ySpeed;
+
+    // Ensure ball stays within screen bounds
+    _xBall = constrain(_xBall, BALL_RADIUS, SCREEN_WIDTH - BALL_RADIUS);
+    _yBall = constrain(_yBall, BALL_RADIUS, SCREEN_HEIGHT - BALL_RADIUS);
+
+    // Check for collisions with walls
+    if (_xBall - BALL_RADIUS <= 0 || _xBall + BALL_RADIUS >= SCREEN_WIDTH)
+    {
+      // Reverse X speed to bounce off the wall
+      _xSpeed *= -1;
+
+      // Play tone when ball hits wall
+      tone(TONE_OUTPUT_PIN, WALL_COLLISION_TONE_FREQUENCY, PLAY_TONE_DURATION_MS);
+    }
+
+    if (_yBall - BALL_RADIUS <= 0 || _yBall + BALL_RADIUS >= SCREEN_HEIGHT)
+    {
+      // Reverse Y speed to bounce off the ceiling or floor
+      _ySpeed *= -1;
+
+      // Play tone when ball hits ceiling or floor
+      tone(TONE_OUTPUT_PIN, CEILING_COLLISION_TONE_FREQUENCY, PLAY_TONE_DURATION_MS);
+    }
+
+    // Check for collisions with dots
+    for (int i = 0; i < NUM_DOTS; ++i)
+    {
+      if (_dotVisible[i])
+      {
+        int distSquared = (_xBall - _dotX[i]) * (_xBall - _dotX[i]) + (_yBall - _dotY[i]) * (_yBall - _dotY[i]);
+        if (distSquared <= (2 * BALL_RADIUS) * (2 * BALL_RADIUS))
+        {
+          _dotVisible[i] = false;
+          _dotsRemaining--;
+
+          // Vibrate motor when dot is collected
+          digitalWrite(VIBROMOTOR_OUTPUT_PIN, HIGH);
+          _vibroMotorStartTimeStamp = millis();
+        }
+      }
+    }
+
+    // Draw ball
+    _display.drawCircle(_xBall, _yBall, BALL_RADIUS, SSD1306_WHITE);
+
+    // Draw dots
+    for (int i = 0; i < NUM_DOTS; ++i)
+    {
+      if (_dotVisible[i])
+      {
+        _display.drawCircle(_dotX[i], _dotY[i], 2, SSD1306_WHITE);
+      }
+    }
+
+    // Render buffer to screen
+    _display.display();
+
+    // Turn off vibration after duration
+    if (_vibroMotorStartTimeStamp != -1 && millis() - _vibroMotorStartTimeStamp > VIBROMOTOR_DURATION_MS)
+    {
+      digitalWrite(VIBROMOTOR_OUTPUT_PIN, LOW);
+      _vibroMotorStartTimeStamp = -1;
+    }
+
+    // Check if all dots are gone
+    if (_dotsRemaining == 0)
+    {
+      displayEndScreen();
+      digitalWrite(LED_PIN, HIGH); // Turn on LED when game over screen is reached
+      delay(5000); // Delay to display end screen for 5 seconds
+      generateDotPositions(); // Regenerate dot positions for the next game
+      _dotsRemaining = NUM_DOTS; // Reset dots remaining counter
+      _xBall = SCREEN_WIDTH / 2; // Reset ball position to the center
+      _yBall = SCREEN_HEIGHT / 2; // Reset ball position to the center
+      _gameStarted = false;
+      digitalWrite(LED_PIN, LOW); // Turn off LED after 5 seconds
+      break; // Exit the loop and restart the game
+    }
+
+    delay(DELAY_LOOP_MS);
+  }
+}
+
+void initializeOledAndShowStartupScreen()
+{
+  if (!_display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) // Address 0x3D for 128x64
+  {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;)
+      ;
+  }
+
+  _display.clearDisplay();
+
+  _display.setTextSize(1);
+  _display.setTextColor(WHITE, BLACK);
+  _display.setCursor(0, 0);
+  _display.println("Move the joystick to start");
+  _display.display();
+}
+
+void displayStartScreen()
+{
+  _display.clearDisplay();
+  _display.setTextSize(1);
+  _display.setTextColor(WHITE, BLACK);
+  _display.setCursor(0, 0);
+  _display.println("Move the joystick to start");
+  _display.display();
+}
+
+void checkStartCondition()
+{
+  int xVal = analogRead(JOY_X_PIN);
+  int yVal = analogRead(JOY_Y_PIN);
+
+  if ((xVal < 330 || xVal > 340) || (yVal < 330 || yVal > 345))
+  {
+    _gameStarted = true;
+    _joyXCenter = xVal;
+    _joyYCenter = yVal;
+    delay(1000); // Delay to stabilize joystick position
+  }
+}
+
+void generateDotPositions()
+{
+  for (int i = 0; i < NUM_DOTS; ++i)
+  {
+    _dotX[i] = random(BALL_RADIUS, SCREEN_WIDTH - BALL_RADIUS);
+    _dotY[i] = random(BALL_RADIUS, SCREEN_HEIGHT - BALL_RADIUS);
+  }
+}
+
+void displayEndScreen()
+{
+  _display.clearDisplay();
+  _display.setTextSize(2);
+  _display.setTextColor(WHITE, BLACK);
+  _display.setCursor(10, 20);
+  _display.println("Game Over!");
+  _display.display();
+}
