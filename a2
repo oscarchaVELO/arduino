@@ -3,6 +3,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#Influnced by ball bounce with haptics and aided by chat gpt
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
@@ -169,6 +171,7 @@ void loop()
       _xBall = SCREEN_WIDTH / 2; // Reset ball position to the center
       _yBall = SCREEN_HEIGHT / 2; // Reset ball position to the center
       _gameStarted = false;
+      generateDotPositions(); // Regenerate dot positions for the next game
       digitalWrite(LED_PIN, LOW); // Turn off LED after 5 seconds
       break; // Exit the loop and restart the game
     }
@@ -228,6 +231,8 @@ void generateDotPositions()
   }
 }
 
+#include <avr/wdt.h> // Include watchdog timer library
+
 void displayEndScreen()
 {
   _display.clearDisplay();
@@ -236,4 +241,17 @@ void displayEndScreen()
   _display.setCursor(10, 20);
   _display.println("Game Over!");
   _display.display();
+  
+  // Turn on LED when game ends
+  digitalWrite(LED_PIN, HIGH);
+  
+  delay(5000); // Delay to display end screen for 5 seconds
+  
+  // Turn off LED after 5 seconds
+  digitalWrite(LED_PIN, LOW);
+  
+  // Restart the program
+  wdt_enable(WDTO_15MS); // Enable watchdog timer with a short timeout
+  while (true); // Wait for the watchdog timer to reset the Arduino
 }
+
