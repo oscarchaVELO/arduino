@@ -1,0 +1,29 @@
+// Pin definitions
+const int joystickXPin = A0; // Analog pin for X-axis
+const int joystickYPin = A1; // Analog pin for Y-axis
+const int buttonPin = 2; // Digital pin for button
+
+void setup() {
+  // Initialize serial communication at 9600 baud
+  Serial.begin(9600);
+  pinMode(buttonPin, INPUT_PULLUP); // Set button pin as input with internal pull-up resistor
+}
+
+void loop() {
+  // Read the analog values from the joystick
+  int joystickXValue = analogRead(joystickXPin);
+  int joystickYValue = analogRead(joystickYPin);
+  
+  // Read the button state
+  int buttonState = digitalRead(buttonPin);
+  
+  // Send the data over serial in the format "X,Y,B"
+  Serial.print(joystickXValue);
+  Serial.print(",");
+  Serial.print(joystickYValue);
+  Serial.print(",");
+  Serial.println(buttonState);
+  
+  // Add a short delay to avoid sending data too quickly
+  delay(100);
+}
